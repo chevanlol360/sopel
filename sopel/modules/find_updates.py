@@ -1,4 +1,4 @@
-# coding=utf8
+# coding=utf-8
 """
 find_updates.py - Update checking module for Sopel.
 
@@ -8,30 +8,29 @@ Sopel website.
 """
 # Copyright 2014, Edward D. Powell, embolalia.net
 # Licensed under the Eiffel Forum License 2.
-from __future__ import unicode_literals
+from __future__ import unicode_literals, absolute_import, print_function, division
 
 import json
-import re
 
 import sopel
 import sopel.module
 import sopel.web
+import sopel.tools
 
 wait_time = 24 * 60 * 60  # check once per day
 startup_check_run = False
 version_url = 'http://sopel.chat/latest.json'
 message = (
-    'A new Sopel version, {}, is available. I am running {}. Please update ' +
-    'me. Full release notes at {}.'
+    'A new Sopel version, {}, is available. I am running {}. Please update '
+    'me. Full release notes at {}'
+)
+unstable_message = (
+    'A new pre-release version, {}, is available. I am running {}. Please '
+    'update me. {}'
 )
 
 
-def parse_version(version):
-    return re.match('(\d+)\.(\d+)\.(\d+)(?:-\S+)?', version).groups()
-
-
-@sopel.module.event('001')
-@sopel.module.event('251')
+@sopel.module.event(sopel.tools.events.LUSERCLIENT)
 @sopel.module.rule('.*')
 def startup_version_check(bot, trigger):
     global startup_check_run
@@ -42,13 +41,19 @@ def startup_version_check(bot, trigger):
 
 @sopel.module.interval(wait_time)
 def check_version(bot):
-    version = parse_version(sopel.__version__)
+    version = sopel.version_info
 
     info = json.loads(sopel.web.get(version_url))
-    latest = info['version']
-    notes = info['release_notes']
-    latest_version = parse_version(latest)
+    if version.releaselevel == 'final':
+        latest = info['version']
+        notes = info['release_notes']
+    else:
+        latest = info['unstable']
+        notes = info.get('unstable_notes', '')
+        if notes:
+            notes = 'Full release notes at ' + notes
+    latest_version = sopel._version_info(latest)
+    msg = message.format(latest, sopel.__version__, notes)
 
     if version < latest_version:
-        bot.msg(bot.config.core.owner,
-                message.format(latest, sopel.__version__, notes))
+        bot.msg(bot.config.core.owner, msg)

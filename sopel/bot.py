@@ -9,9 +9,7 @@ Licensed under the Eiffel Forum License 2.
 
 http://sopel.chat/
 """
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import absolute_import
+from __future__ import unicode_literals, absolute_import, print_function, division
 
 import collections
 import os
@@ -41,6 +39,18 @@ else:
     py3 = False
 
 
+class _CapReq(object):
+    def __init__(self, prefix, module, failure=None, arg=None, success=None):
+        def nop(bot, cap):
+            pass
+        # TODO at some point, reorder those args to be sane
+        self.prefix = prefix
+        self.module = module
+        self.arg = arg
+        self.failure = failure or nop
+        self.success = success or nop
+
+
 class Sopel(irc.Bot):
     def __init__(self, config, daemon=False):
         irc.Bot.__init__(self, config)
@@ -62,6 +72,8 @@ class Sopel(irc.Bot):
         key in version *3.2* onward. Prior to *3.2*, the name of the function
         as declared in the source code was used.
         """
+        self.command_groups = collections.defaultdict(list)
+        """A mapping of module names to a list of commands in it."""
         self.stats = {}
         """
         A dictionary which maps a tuple of a function name and where it was
@@ -74,25 +86,40 @@ class Sopel(irc.Bot):
         """
         self.acivity = {}
 
-        self.server_capabilities = set()
-        """A set containing the IRCv3 capabilities that the server supports.
+        self.server_capabilities = {}
+        """A dict mapping supported IRCv3 capabilities to their options.
+
+        For example, if the server specifies the capability ``sasl=EXTERNAL``,
+        it will be here as ``{"sasl": "EXTERNAL"}``. Capabilities specified
+        without any options will have ``None`` as the value.
 
         For servers that do not support IRCv3, this will be an empty set."""
         self.enabled_capabilities = set()
         """A set containing the IRCv3 capabilities that the bot has enabled."""
         self._cap_reqs = dict()
-        """A dictionary of capability requests
-
-        Maps the capability name to a list of tuples of the prefix ('-', '=',
-        or ''), the name of the requesting module, and the function to call if
-        the request is rejected."""
+        """A dictionary of capability names to a list of requests"""
 
         self.privileges = dict()
         """A dictionary of channels to their users and privilege levels
 
+        Deprecated from 6.2.0; use bot.channels instead.
+
         The value associated with each channel is a dictionary of Identifiers to a
         bitwise integer value, determined by combining the appropriate constants
         from `module`."""
+
+        self.channels = tools.SopelMemory()  # name to chan obj
+        """A map of the channels that Sopel is in.
+
+        The keys are Identifiers of the channel names, and map to Channel
+        objects which contain the users in the channel and their permissions.
+        """
+        self.users = tools.SopelMemory() # name to user obj
+        """A map of the users that Sopel is aware of.
+
+        In order for Sopel to be aware of a user, it must be in at least one
+        channel which they are also in.
+        """
 
         self.db = SopelDB(config)
         """The bot's database."""
@@ -158,12 +185,19 @@ class Sopel(irc.Bot):
             stderr("Warning: Couldn't load any modules")
 
     def unregister(self, obj):
+        if not callable(obj):
+            return
         if hasattr(obj, 'rule'):  # commands and intents have it added
             for rule in obj.rule:
-                self._callables[obj.priority][rule].remove(obj)
+                callb_list = self._callables[obj.priority][rule]
+                if obj in callb_list:
+                    callb_list.remove(obj)
         if hasattr(obj, 'interval'):
-            pass  # TODO
-        if getattr(obj, '__name__', None) == 'shutdown':
+            # TODO this should somehow find the right job to remove, rather than
+            # clearing the entire queue. Issue #831
+            self.scheduler.clear_jobs()
+        if (getattr(obj, '__name__', None) == 'shutdown'
+                and obj in self.shutdown_methods):
             self.shutdown_methods.remove(obj)
 
     def register(self, callables, jobs, shutdowns):
@@ -171,6 +205,14 @@ class Sopel(irc.Bot):
         for callbl in callables:
             for rule in callbl.rule:
                 self._callables[callbl.priority][rule].append(callbl)
+            if hasattr(callbl, 'commands'):
+                module_name = callbl.__module__.rsplit('.', 1)[-1]
+                # TODO doc and make decorator for this. Not sure if this is how
+                # it should work yet, so not making it public for 6.0.
+                category = getattr(callbl, 'category', module_name)
+                self.command_groups[category].append(callbl.commands[0])
+            for command, docs in callbl._docs.items():
+                self.doc[command] = docs
         for func in jobs:
             for interval in func.interval:
                 job = sopel.tools.jobs.Job(interval, func)
@@ -189,38 +231,33 @@ class Sopel(irc.Bot):
                           if not attr.startswith('__')]
             return list(self.__dict__) + classattrs + dir(self._bot)
 
-        def say(self, string, max_messages=1):
-            self._bot.msg(self._trigger.sender, string, max_messages)
-
-        def reply(self, string, notice=False):
-            if isinstance(string, str) and not py3:
-                string = string.decode('utf8')
-            if notice:
-                self.notice(
-                    '%s: %s' % (self._trigger.nick, string),
-                    self._trigger.sender
-                )
-            else:
-                self._bot.msg(
-                    self._trigger.sender,
-                    '%s: %s' % (self._trigger.nick, string)
-                )
-
-        def action(self, string, recipient=None):
-            if recipient is None:
-                recipient = self._trigger.sender
-            self._bot.msg(recipient, '\001ACTION %s\001' % string)
-
-        def notice(self, string, recipient=None):
-            if recipient is None:
-                recipient = self._trigger.sender
-            self.write(('NOTICE', recipient), string)
-
         def __getattr__(self, attr):
             return getattr(self._bot, attr)
 
         def __setattr__(self, attr, value):
             return setattr(self._bot, attr, value)
+
+        def say(self, message, destination=None, max_messages=1):
+            if destination is None:
+                destination = self._trigger.sender
+            self._bot.say(message, destination, max_messages)
+
+        def action(self, message, destination=None):
+            if destination is None:
+                destination = self._trigger.sender
+            self._bot.action(message, destination)
+
+        def notice(self, message, destination=None):
+            if destination is None:
+                destination = self._trigger.sender
+            self._bot.notice(message, destination)
+
+        def reply(self, message, destination=None, reply_to=None, notice=False):
+            if destination is None:
+                destination = self._trigger.sender
+            if reply_to is None:
+                reply_to = self._trigger.nick
+            self._bot.reply(message, destination, reply_to, notice)
 
     def call(self, func, sopel, trigger):
         nick = trigger.nick
@@ -252,7 +289,7 @@ class Sopel(irc.Bot):
 
     def dispatch(self, pretrigger):
         args = pretrigger.args
-        event, args, text = pretrigger.event, args, args[-1]
+        event, args, text = pretrigger.event, args, args[-1] if args else ''
 
         if self.config.core.nick_blocks or self.config.core.host_blocks:
             nick_blocked = self._nick_blocked(pretrigger.nick)
@@ -268,7 +305,9 @@ class Sopel(irc.Bot):
                 match = regexp.match(text)
                 if not match:
                     continue
-                trigger = Trigger(self.config, pretrigger, match)
+                user_obj = self.users.get(pretrigger.nick)
+                account = user_obj.account if user_obj else None
+                trigger = Trigger(self.config, pretrigger, match, account)
                 wrapper = self.SopelWrapper(self, trigger)
 
                 for func in funcs:
@@ -349,7 +388,8 @@ class Sopel(irc.Bot):
                     )
                 )
 
-    def cap_req(self, module_name, capability, failure_callback):
+    def cap_req(self, module_name, capability, arg=None, failure_callback=None,
+                success_callback=None):
         """Tell Sopel to request a capability when it starts.
 
         By prefixing the capability with `-`, it will be ensured that the
@@ -372,21 +412,33 @@ class Sopel(irc.Bot):
         request, the `failure_callback` function will be called, if provided.
         The arguments will be a `Sopel` object, and the capability which was
         rejected. This can be used to disable callables which rely on the
-        capability.
+        capability. It will be be called either if the server NAKs the request,
+        or if the server enabled it and later DELs it.
 
+        The `success_callback` function will be called upon acknowledgement of
+        the capability from the server, whether during the initial capability
+        negotiation, or later.
+
+        If ``arg`` is given, and does not exactly match what the server
+        provides or what other modules have requested for that capability, it is
+        considered a conflict.
         """
         # TODO raise better exceptions
         cap = capability[1:]
         prefix = capability[0]
 
+        entry = self._cap_reqs.get(cap, [])
+        if any((ent.arg != arg for ent in entry)):
+            raise Exception('Capability conflict')
+
         if prefix == '-':
             if self.connection_registered and cap in self.enabled_capabilities:
                 raise Exception('Can not change capabilities after server '
                                 'connection has been completed.')
-            entry = self._cap_reqs.get(cap, [])
-            if any((ent[0] != '-' for ent in entry)):
+            if any((ent.prefix != '-' for ent in entry)):
                 raise Exception('Capability conflict')
-            entry.append((prefix, module_name, failure_callback))
+            entry.append(_CapReq(prefix, module_name, failure_callback, arg,
+                                 success_callback))
             self._cap_reqs[cap] = entry
         else:
             if prefix != '=':
@@ -396,10 +448,10 @@ class Sopel(irc.Bot):
                                                self.enabled_capabilities):
                 raise Exception('Can not change capabilities after server '
                                 'connection has been completed.')
-            entry = self._cap_reqs.get(cap, [])
             # Non-mandatory will callback at the same time as if the server
             # rejected it.
-            if any((ent[0] == '-' for ent in entry)) and prefix == '=':
+            if any((ent.prefix == '-' for ent in entry)) and prefix == '=':
                 raise Exception('Capability conflict')
-            entry.append((prefix, module_name, failure_callback))
+            entry.append(_CapReq(prefix, module_name, failure_callback, arg,
+                                 success_callback))
             self._cap_reqs[cap] = entry

@@ -1,13 +1,13 @@
-# coding=utf8
+# coding=utf-8
 """
 codepoints.py - Sopel Codepoints Module
 Copyright 2013, Edward Powell, embolalia.net
 Copyright 2008, Sean B. Palmer, inamidst.com
 Licensed under the Eiffel Forum License 2.
 
-http://sopel.dfbta.net
+http://sopel.chat
 """
-from __future__ import unicode_literals
+from __future__ import unicode_literals, absolute_import, print_function, division
 import unicodedata
 import sys
 from sopel.module import commands, example, NOLIMIT

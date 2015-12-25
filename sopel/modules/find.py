@@ -1,4 +1,4 @@
-# coding=utf8
+# coding=utf-8
 """
 find.py - Sopel Spelling correction module
 Copyright 2011, Michael Yanovich, yanovich.net
@@ -11,7 +11,7 @@ Contributions from: Matt Meinwald and Morgan Goose
 This module will fix spelling errors if someone corrects them
 using the sed notation (s///) commonly found in vi/vim.
 """
-from __future__ import unicode_literals
+from __future__ import unicode_literals, absolute_import, print_function, division
 
 import re
 from sopel.tools import Identifier, SopelMemory
@@ -110,6 +110,7 @@ def findandreplace(bot, trigger):
 
     # Look back through the user's lines in the channel until you find a line
     # where the replacement works
+    new_phrase = None
     for line in reversed(search_dict[trigger.sender][rnick]):
         if line.startswith("\x01ACTION"):
             me = True  # /me command

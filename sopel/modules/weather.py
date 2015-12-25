@@ -1,4 +1,4 @@
-# coding=utf8
+# coding=utf-8
 """
 weather.py - Sopel Yahoo! Weather Module
 Copyright 2008, Sean B. Palmer, inamidst.com
@@ -7,13 +7,12 @@ Licensed under the Eiffel Forum License 2.
 
 http://sopel.chat
 """
-from __future__ import unicode_literals
+from __future__ import unicode_literals, absolute_import, print_function, division
 
 from sopel import web
 from sopel.module import commands, example, NOLIMIT
 
-import feedparser
-from lxml import etree
+import xmltodict
 
 
 def woeid_search(query):
@@ -25,19 +24,21 @@ def woeid_search(query):
     query = 'q=select * from geo.placefinder where text="%s"' % query
     body = web.get('http://query.yahooapis.com/v1/public/yql?' + query,
                    dont_decode=True)
-    parsed = etree.fromstring(body)
-    first_result = parsed.find('results/Result')
-    if first_result is None or len(first_result) == 0:
+    parsed = xmltodict.parse(body).get('query')
+    results = parsed.get('results')
+    if results is None or results.get('Result') is None:
         return None
-    return first_result
+    if type(results.get('Result')) is list:
+        return results.get('Result')[0]
+    return results.get('Result')
 
 
 def get_cover(parsed):
     try:
-        condition = parsed.entries[0]['yweather_condition']
+        condition = parsed['channel']['item']['yweather:condition']
     except KeyError:
         return 'unknown'
-    text = condition['text']
+    text = condition['@text']
     # code = int(condition['code'])
     # TODO parse code to get those little icon thingies.
     return text
@@ -45,8 +46,8 @@ def get_cover(parsed):
 
 def get_temp(parsed):
     try:
-        condition = parsed.entries[0]['yweather_condition']
-        temp = int(condition['temp'])
+        condition = parsed['channel']['item']['yweather:condition']
+        temp = int(condition['@temp'])
     except (KeyError, ValueError):
         return 'unknown'
     f = round((temp * 1.8) + 32, 2)
@@ -55,7 +56,7 @@ def get_temp(parsed):
 
 def get_humidity(parsed):
     try:
-        humidity = parsed['feed']['yweather_atmosphere']['humidity']
+        humidity = parsed['channel']['yweather:atmosphere']['@humidity']
     except (KeyError, ValueError):
         return 'unknown'
     return "Humidity: %s%%" % humidity
@@ -63,11 +64,11 @@ def get_humidity(parsed):
 
 def get_wind(parsed):
     try:
-        wind_data = parsed['feed']['yweather_wind']
-        kph = float(wind_data['speed'])
+        wind_data = parsed['channel']['yweather:wind']
+        kph = float(wind_data['@speed'])
         m_s = float(round(kph / 3.6, 1))
         speed = int(round(kph / 1.852, 0))
-        degrees = int(wind_data['direction'])
+        degrees = int(wind_data['@direction'])
     except (KeyError, ValueError):
         return 'unknown'
 
@@ -136,15 +137,16 @@ def weather(bot, trigger):
         if woeid is None:
             first_result = woeid_search(location)
             if first_result is not None:
-                woeid = first_result.find('woeid').text
+                woeid = first_result.get('woeid')
 
     if not woeid:
         return bot.reply("I don't know where that is.")
 
     query = web.urlencode({'w': woeid, 'u': 'c'})
-    url = 'http://weather.yahooapis.com/forecastrss?' + query
-    parsed = feedparser.parse(url)
-    location = parsed['feed']['title']
+    raw = web.get('http://weather.yahooapis.com/forecastrss?' + query, 
+                  dont_decode=True)
+    parsed = xmltodict.parse(raw).get('rss')
+    location = parsed.get('channel').get('title')
 
     cover = get_cover(parsed)
     temp = get_temp(parsed)
@@ -165,16 +167,16 @@ def update_woeid(bot, trigger):
     if first_result is None:
         return bot.reply("I don't know where that is.")
 
-    woeid = first_result.find('woeid').text
+    woeid = first_result.get('woeid')
 
     bot.db.set_nick_value(trigger.nick, 'woeid', woeid)
 
-    neighborhood = first_result.find('neighborhood').text or ''
+    neighborhood = first_result.get('neighborhood') or ''
     if neighborhood:
         neighborhood += ','
-    city = first_result.find('city').text or ''
-    state = first_result.find('state').text or ''
-    country = first_result.find('country').text or ''
-    uzip = first_result.find('uzip').text or ''
+    city = first_result.get('city') or ''
+    state = first_result.get('state') or ''
+    country = first_result.get('country') or ''
+    uzip = first_result.get('uzip') or ''
     bot.reply('I now have you at WOEID %s (%s %s, %s, %s %s.)' %
               (woeid, neighborhood, city, state, country, uzip))

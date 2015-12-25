@@ -1,4 +1,4 @@
-# coding=utf8
+# coding=utf-8
 """
 reddit-info.py - Sopel Reddit module
 Author: Edward Powell, embolalia.net
@@ -7,7 +7,7 @@ About: http://sopel.chat
 This module provides special tools for reddit, namely showing detailed
 info about reddit posts
 """
-from __future__ import unicode_literals
+from __future__ import unicode_literals, absolute_import, print_function, division
 
 from sopel.module import commands, rule, example, NOLIMIT, OP
 from sopel.formatting import bold, color, colors

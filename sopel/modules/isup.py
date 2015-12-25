@@ -1,4 +1,4 @@
-# coding=utf8
+# coding=utf-8
 """
 isup.py - Simple website status check with isup.me
 Author: Edward Powell http://embolalia.net
@@ -6,7 +6,7 @@ About: http://sopel.chat
 
 This allows users to check if a website is up through isup.me.
 """
-from __future__ import unicode_literals
+from __future__ import unicode_literals, absolute_import, print_function, division
 
 from sopel import web
 from sopel.module import commands
@@ -19,7 +19,7 @@ def isup(bot, trigger):
     if not site:
         return bot.reply("What site do you want to check?")
 
-    if site[:6] != 'http://' and site[:7] != 'https://':
+    if site[:7] != 'http://' and site[:8] != 'https://':
         if '://' in site:
             protocol = site.split('://')[0] + '://'
             return bot.reply("Try it again without the %s" % protocol)

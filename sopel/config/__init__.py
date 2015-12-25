@@ -1,4 +1,4 @@
-# coding=utf8
+# coding=utf-8
 """
 *Availability: 3+; 6+ for configuration section definitions.*
 
@@ -17,9 +17,7 @@ object is initialized.
 # Copyright © 2012, Elad Alfassa <elad@fedoraproject.org>
 # Licensed under the Eiffel Forum License 2.
 
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import absolute_import
+from __future__ import unicode_literals, absolute_import, print_function, division
 
 from sopel.tools import iteritems, stderr
 import sopel.tools
@@ -110,9 +108,14 @@ class Config(object):
         if not issubclass(cls_, StaticSection):
             raise ValueError("Class must be a subclass of StaticSection.")
         current = getattr(self, name, None)
+        current_name = str(current.__class__)
+        new_name = str(cls_)
         if (current is not None and not isinstance(current, self.ConfigSection)
-                and not current.__class__ == cls_):
-            raise ValueError("Can not re-define class for section.")
+                and not current_name == new_name):
+            raise ValueError(
+                "Can not re-define class for section from {} to {}.".format(
+                    current_name, new_name)
+            )
         setattr(self, name, cls_(self, name, validate=validate))
 
     class ConfigSection(object):

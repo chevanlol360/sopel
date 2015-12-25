@@ -9,8 +9,7 @@ Licensed under the Eiffel Forum License 2.
 
 http://sopel.chat/
 """
-from __future__ import unicode_literals
-from __future__ import absolute_import
+from __future__ import unicode_literals, absolute_import, print_function, division
 
 from collections import namedtuple
 import os
@@ -19,22 +18,22 @@ import time
 import traceback
 import signal
 
-__version__ = '6.0.0a4'
+__version__ = '6.1.1'
 
 
-def _version_info():
+def _version_info(version=__version__):
     regex = re.compile(r'(\d+)\.(\d+)\.(\d+)(?:(a|b|rc)(\d+))?.*')
     version_groups = regex.match(__version__).groups()
     major, minor, micro = (int(piece) for piece in version_groups[0:3])
     level = version_groups[3]
-    serial = int(version_groups[4]) or 0
+    serial = int(version_groups[4] or 0)
     if level == 'a':
         level = 'alpha'
     elif level == 'b':
         level = 'beta'
     elif level == 'rc':
         level = 'candidate'
-    elif not level and not version_groups[5]:
+    elif not level and version_groups[4] is None:
         level = 'final'
     else:
         level = 'alpha'

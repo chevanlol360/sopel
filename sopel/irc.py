@@ -12,9 +12,7 @@ Sopel: http://sopel.chat/
 When working on core IRC protocol related features, consult protocol
 documentation at http://www.irchelp.org/irchelp/rfc/
 """
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import absolute_import
+from __future__ import unicode_literals, absolute_import, print_function, division
 
 import sys
 import re
@@ -66,9 +64,6 @@ class Bot(asynchat.async_chat):
         self.name = config.core.name
         """Sopel's "real name", as used for whois."""
 
-        self.channels = []
-        """The list of channels Sopel is currently in."""
-
         self.stack = {}
         self.ca_certs = ca_certs
         self.hasquit = False
@@ -80,20 +75,13 @@ class Bot(asynchat.async_chat):
         # Right now, only accounting for two op levels.
         # This might be expanded later.
         # These lists are filled in startup.py, as of right now.
+        # Are these even touched at all anymore? Remove in 7.0.
         self.ops = dict()
-        """
-        A dictionary mapping channels to a ``Identifier`` list of their operators.
-        """
+        """Deprecated. Use bot.channels instead."""
         self.halfplus = dict()
-        """
-        A dictionary mapping channels to a ``Identifier`` list of their half-ops and
-        ops.
-        """
+        """Deprecated. Use bot.channels instead."""
         self.voices = dict()
-        """
-        A dictionary mapping channels to a ``Identifier`` list of their voices,
-        half-ops and ops.
-        """
+        """Deprecated. Use bot.channels instead."""
 
         # We need this to prevent error loops in handle_error
         self.error_count = 0
@@ -273,7 +261,7 @@ class Bot(asynchat.async_chat):
         # Request list of server capabilities. IRCv3 servers will respond with
         # CAP * LS (which we handle in coretasks). v2 servers will respond with
         # 421 Unknown command, which we'll ignore
-        self.write(('CAP', 'LS'))
+        self.write(('CAP', 'LS', '302'))
 
         if self.config.core.auth_method == 'server':
             password = self.config.core.auth_password
@@ -368,6 +356,8 @@ class Bot(asynchat.async_chat):
         self.buffer = ''
         self.last_ping_time = datetime.now()
         pretrigger = PreTrigger(self.nick, line)
+        if 'account-tag' not in self.enabled_capabilities:
+            pretrigger.tags.pop('account', None)
 
         if pretrigger.event == 'PING':
             self.write(('PONG', pretrigger.args[-1]))
@@ -385,6 +375,10 @@ class Bot(asynchat.async_chat):
         pass
 
     def msg(self, recipient, text, max_messages=1):
+        # Deprecated, but way too much of a pain to remove.
+        self.say(text, recipient, max_messages)
+
+    def say(self, text, recipient, max_messages=1):
         # We're arbitrarily saying that the max is 400 bytes of text when
         # messages will be split. Otherwise, we'd have to acocunt for the bot's
         # hostmask, which is hard.
@@ -445,13 +439,23 @@ class Bot(asynchat.async_chat):
         if excess:
             self.msg(recipient, excess, max_messages - 1)
 
-    def notice(self, dest, text):
+    def notice(self, text, dest):
         """Send an IRC NOTICE to a user or a channel.
 
         See IRC protocol documentation for more information.
 
         """
         self.write(('NOTICE', dest), text)
+
+    def action(self, text, dest):
+        self.say('\001ACTION {}\001'.format(text), dest)
+
+    def reply(self, text, dest, reply_to, notice=False):
+        text = '%s: %s' % (reply_to, text)
+        if notice:
+            self.notice(text, dest)
+        else:
+            self.say(text, dest)
 
     def error(self, trigger=None):
         """Called internally when a module causes an error."""
@@ -523,46 +527,3 @@ class Bot(asynchat.async_chat):
         self.last_error_timestamp = datetime.now()
         self.error_count = self.error_count + 1
 
-    # Helper functions to maintain the oper list.
-    # They cast to Identifier when adding to be quite sure there aren't any accidental
-    # string nicks. On deletion, you know you'll never need to worry about what
-    # the real superclass is, so we just cast and remove.
-    def add_op(self, channel, name):
-        if isinstance(name, Identifier):
-            self.ops[channel].add(name)
-        else:
-            self.ops[channel].add(Identifier(name))
-
-    def add_halfop(self, channel, name):
-        if isinstance(name, Identifier):
-            self.halfplus[channel].add(name)
-        else:
-            self.halfplus[channel].add(Identifier(name))
-
-    def add_voice(self, channel, name):
-        if isinstance(name, Identifier):
-            self.voices[channel].add(name)
-        else:
-            self.voices[channel].add(Identifier(name))
-
-    def del_op(self, channel, name):
-        self.ops[channel].discard(Identifier(name))
-
-    def del_halfop(self, channel, name):
-        self.halfplus[channel].discard(Identifier(name))
-
-    def del_voice(self, channel, name):
-        self.voices[channel].discard(Identifier(name))
-
-    def flush_ops(self, channel):
-        self.ops[channel] = set()
-        self.halfplus[channel] = set()
-        self.voices[channel] = set()
-
-    def init_ops_list(self, channel):
-        if channel not in self.halfplus:
-            self.halfplus[channel] = set()
-        if channel not in self.ops:
-            self.ops[channel] = set()
-        if channel not in self.voices:
-            self.voices[channel] = set()

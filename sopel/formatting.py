@@ -4,7 +4,7 @@
 The formatting module includes functions to apply IRC formatting to text."""
 # Copyright 2014, Edward D. Powell, embolalia.net
 # Licensed under the Eiffel Forum License 2.
-from __future__ import unicode_literals
+from __future__ import unicode_literals, absolute_import, print_function, division
 import sys
 if sys.version_info.major >= 3:
     unicode = str
@@ -45,11 +45,13 @@ class colors:
     PINK = '13'
     LIGHT_PURPLE = PINK
     FUCHSIA = PINK
-    # Nobody has complained that this is grey not gray yet, so go with it?
     GREY = '14'
     LIGHT_GREY = '15'
     SILVER = LIGHT_GREY
 
+    #Create aliases.
+    GRAY = GREY
+    LIGHT_GRAY = LIGHT_GREY
 
 def _get_color(color):
     if color is None:
