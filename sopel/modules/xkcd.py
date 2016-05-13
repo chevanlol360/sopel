@@ -1,18 +1,14 @@
 # coding=utf-8
-"""
-xkcd.py - XKCD Module
-Copyright 2010, Michael Yanovich (yanovich.net), and Morgan Goose
-Copyright 2012, Lior Ramati
-Copyright 2013, Edward Powell (embolalia.com)
-Licensed under the Eiffel Forum License 2.
-
-http://sopel.chat
-"""
+# Copyright 2010, Michael Yanovich (yanovich.net), and Morgan Goose
+# Copyright 2012, Lior Ramati
+# Copyright 2013, Elsie Powell (embolalia.com)
+# Licensed under the Eiffel Forum License 2.
 from __future__ import unicode_literals, absolute_import, print_function, division
 
 import json
 import random
 import re
+import requests
 from sopel import web
 from sopel.modules.search import google_search
 from sopel.module import commands
@@ -37,8 +33,7 @@ def get_info(number=None):
         url = 'http://xkcd.com/{}/info.0.json'.format(number)
     else:
         url = 'http://xkcd.com/info.0.json'
-    data = web.get(url)
-    data = json.loads(data)
+    data = requests.get(url).json()
     data['url'] = 'http://xkcd.com/' + str(data['num'])
     return data
 

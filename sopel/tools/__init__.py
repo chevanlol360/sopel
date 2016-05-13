@@ -1,13 +1,13 @@
 # coding=utf-8
-"""
+"""Useful miscellaneous tools and shortcuts for Sopel modules
+
 *Availability: 3+*
-``tools`` contains a number of useful miscellaneous tools and shortcuts for use
-in Sopel modules."""
+"""
 
 # tools.py - Sopel misc tools
 # Copyright 2008, Sean B. Palmer, inamidst.com
 # Copyright © 2012, Elad Alfassa <elad@fedoraproject.org>
-# Copyright 2012, Edward Powell, embolalia.net
+# Copyright 2012, Elsie Powell, embolalia.com
 # Licensed under the Eiffel Forum License 2.
 
 # https://sopel.chat
@@ -25,6 +25,7 @@ from collections import defaultdict
 from sopel.tools._events import events  # NOQA
 
 if sys.version_info.major >= 3:
+    raw_input = input
     unicode = str
     iteritems = dict.items
     itervalues = dict.values
